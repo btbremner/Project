@@ -1,0 +1,78 @@
+from scipy import stats
+
+def eof_projection(data, basin, trend = False):
+    if trend != False:
+        trend = np.zeros((180, 145, 360))
+        slope = (get_slopes(data)[0])
+        for i in range(np.shape(data)[0]):
+            t = (i+1) * slope #+ inter #as trend is in months 
+            trend[i] = t
+        
+        data_from_trend = data - trend
+        mean_from_trend = variance(data_from_trend, choice = 'm')
+        global_data = data_from_trend - mean_from_trend
+        basin_data = global_data * get_masks()[basin]
+    else:
+        mean = variance(data, choice = 'm')
+        global_data = data -  mean
+        basin_data = global_data * get_masks()[basin]
+    
+    wgts = np.ones((145, 360))
+    for i in range(0,145):
+        t = np.cos(lat[i]/360)
+        wgts[i] = t
+    
+    solver = Eof(basin_data, weights = wgts)
+    eof = solver.eofsAsCovariance(neofs=2)
+    pc = solver.pcs(npcs=2, pcscaling=1)
+    Variance  = solver.varianceFraction()
+    
+    global_data_transposed = np.transpose(global_data, (1, 2, 0))
+    
+    eof_proj = global_data_transposed.dot(pc[:,0])
+    
+    for i in range(0, 145):
+        for j in range(0, 360):
+            no_nan = np.count_nonzero(np.isnan(global_data_transposed[i, j, :]))
+            if no_nan != 180:
+                eof_proj[i, j] = eof_proj[i, j]/(180-no_nan)
+    return eof_proj, pc, Variance
+
+
+def ttest(data, trend = False):
+    split = 90
+    
+    if trend != False:
+        slope = (get_slopes(data)[0])
+        trend_data = np.zeros((180, 145, 360))
+        for i in range(np.shape(data)[0]):
+            t = (i+1) * slope #+ inter #as trend is in months 
+            trend_data[i] = t
+            data  = data - trend_data
+    else:
+        data = data
+    
+    data_s1 = np.empty((split, 145, 360))
+    
+    for i in range(0, split):
+            data_s1[i]  =  data[i]
+
+    data_s2 = np.empty((180-split, 145, 360))
+
+    for i in range(0, 180-split):
+            data_s2[i]  =  data[i+split]
+    
+    data_s1_t = np.transpose(data_s1, (1, 2, 0))
+    data_s2_t = np.transpose(data_s2, (1, 2, 0))
+    
+    tStat = np.empty((145, 360))
+    pValue = np.empty((145, 360))
+    
+    for i in range(0, 144):
+        for j in range(0, 359):
+               a  = np.array([data_s1_t[i, j]])[0]
+               b  = np.array([data_s2_t[i, j]])[0]
+               t, p = stats.ttest_rel(a, b, nan_policy = 'omit')
+               tStat[i, j] = t
+               pValue[i, j] = p
+    return tStat, pValue
