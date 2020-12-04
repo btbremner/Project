@@ -1,0 +1,119 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy as sp
+from scipy.optimize import curve_fit
+import pandas as pd
+import analysis as an
+import dataplotting as data
+import basins as ba
+from scipy import stats
+import functions as f
+
+from eofs.standard import Eof
+
+Ca = 'Carribean' #0
+Me = 'Mediterranean' #1
+SEA = 'SE_Asia' #2
+A = 'Arctic' #3
+NP = 'N_Pacific' #4
+EP = 'Eq_Pacific'  #5
+SP = 'S_Pacific' #6
+NA = 'N_Atlantic' #7
+EA = 'Eq_Atlantic' #8
+SA = 'S_Atlantic' #9
+Ar = 'Arabian' #10
+BB = 'Bay_Bengal' #11
+EI = 'Eq_Indian' #12
+SI = 'S_Indian' #13
+So = 'Southern' #14
+
+ARGOcoast_lon = np.load('ARGOcoast_lon.npy')  
+ARGOcoast_lat = np.load('ARGOcoast_lat.npy')
+
+
+long = data.ARGO_2018_270[0]
+lat = data.ARGO_2018_270[1]
+
+#original data
+data_no_trend = data.SALO_275*data.MASKO_275
+data_type = "detrended salinity"
+layer = "27.5"
+
+tstatmin = -15
+tstatmax = 15
+
+varmin = 0
+varmax = 0.05
+
+pValue_cutoff = 0.01
+sig = "1"
+
+
+
+#finding data from trend 
+slope = (f.get_slopes(data_no_trend)[0])
+
+trend_data = np.zeros((180, 145, 360))
+
+for i in range(0, np.shape(data_no_trend)[0]):
+    t = (i-90) * slope #+ inter #as trend is in months 
+    trend_data[i] = t
+
+data_from_trend = data_no_trend - trend_data
+
+#defining whether we are using original or detrended data
+data = data_from_trend
+
+#carrying out ttest
+ttest = f.ttest(data)
+
+tStat = ttest[0]
+pValue = ttest[1]
+
+
+#finding data means for contours
+mean_data_no_trend = an.variance(data, 'm')
+
+mean_data_from_trend = an.variance(data_from_trend, 'm')
+
+#defining whether we are using original or detrended data
+mean_data = mean_data_from_trend
+
+
+#plotting tstat wiht mean contours
+plt.figure(201)
+
+contour_values_temperature = np.arange(-50, 50, 0.1)
+contour_values_depth = np.array([0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400])
+#contour_values_depth_100 = np.array([0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400])
+
+contour_values = contour_values_temperature
+
+
+contours = plt.contour(long, lat, mean_data, contour_values, colors = 'black')
+plt.clabel(contours, levels = contour_values,  inline=True, fontsize=5)
+
+
+cmm = plt.pcolor(long, lat, tStat, cmap = 'nipy_spectral', vmin = tstatmin, vmax = tstatmax) 
+cbm = plt.colorbar(cmm, orientation='vertical')
+plt.plot(ARGOcoast_lon,ARGOcoast_lat, 'ko', markersize=.3)
+plt.title('tStat of ' + layer + ' ' + data_type + ' between 2004-10.5 and 2010.5-19 (m)', fontsize = 9)
+
+
+#plotting variance of data with mean contours and hatching when ttest significance is less than chosen amount
+plt.figure(203)
+
+contours = plt.contour(long, lat, mean_data, contour_values, colors = 'black')
+plt.clabel(contours, levels = contour_values,  inline=True, fontsize=5)
+
+
+cmm = plt.pcolor(long, lat, (f.variance(data))**0.5, cmap = 'YlGnBu', vmin = varmin, vmax = varmax) 
+cbm = plt.colorbar(cmm, orientation='vertical')
+plt.plot(ARGOcoast_lon,ARGOcoast_lat, 'ko', markersize=.3)
+
+zm = np.ma.masked_greater(pValue, pValue_cutoff)
+
+#cm = plt.pcolormesh(long, lat, z)
+plt.pcolor(long, lat, zm, hatch='xxx', alpha=0.)
+
+plt.title('Variance of ' + layer + ' ' + data_type + ' between 2004-10.5 and 2010.5-19 (m) with ' + sig + '% sig hatching', fontsize = 8)
